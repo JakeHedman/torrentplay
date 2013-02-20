@@ -2,13 +2,28 @@
 #coding: utf-8
 
 # Requirements:
+	unrar
+	transmission with remote access enabled on port 9091
+	transmissionrpc (easy_install transmissionrpc)
+
 #  - easy_install transmissionrpc
 #
 #  - unrar
+#  - Transmission with remote access enabled
 # 
-# Linux only
-#  - mplayer
-#  - Python 2.x (Modify hashbang)
+#   Linux only
+#    - mplayer
+#    - Python 2.x (Modify hashbang)
+
+# TODO:
+# - Settings
+#   - Port
+#   - Auth
+#   - Number of simultaneous downloads
+#   - Delete .torrent
+#   - Delete data
+#   - Path
+# - rtorrent support
 
 import os
 import re
@@ -69,7 +84,6 @@ while downloading:
 			# If the file is the first one
 			if i == 0:
 				print "Extracting first file %s" % f['name']
-				# Start exracting
 				nullw = open('/dev/null', 'w')
 
 				rarpath = "%s/%s" % (tc.session.download_dir, f['name'])
@@ -93,9 +107,7 @@ while downloading:
 					subprocess.call(['open', target_path])
 				else:
 					exit("Unknown platform, why the face?")
-
 			else:
-				# Extract next
 				p.stdin.write("C\n")
 				print "Extracting next file %s" % f['name']
 			completed.append(f['name'])
@@ -118,7 +130,6 @@ while downloading:
 		new_files[t.id][f['id']] = filedict
 
 	tc.set_files(new_files)
-
 	time.sleep(3)
 
 print "Done downloading"
