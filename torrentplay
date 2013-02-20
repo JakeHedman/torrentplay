@@ -2,14 +2,12 @@
 #coding: utf-8
 
 # Requirements:
-	unrar
-	transmission with remote access enabled on port 9091
-	transmissionrpc (easy_install transmissionrpc)
-
-#  - easy_install transmissionrpc
+#   Python packages:
+#     - easy_install transmissionrpc
 #
-#  - unrar
-#  - Transmission with remote access enabled
+#   Packages/Apps:
+#     - unrar
+#     - Transmission with remote access enabled
 # 
 #   Linux only
 #    - mplayer
