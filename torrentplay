@@ -34,18 +34,14 @@ tc = transmissionrpc.Client()
 tpath = os.path.abspath(sys.argv[1])
 t = tc.add_torrent(tpath)
 os.unlink(tpath) # Delete .torrent
+t.update()
 
-# Wait for initial file list
-while not t.files():
-	t.update()
-	time.sleep(0.1)
-
+simultan = 1 # Start downloading 1 at a time
 completed = [] # Container for downloaded and extracted rar files
 
 downloading = True # Fake value for first iteration
 while downloading:
-	t.update() # Fetch new torrent info
-	
+	t.update() # Fetch new torrent info	
 	# Separate rar files and other files
 	rars = []
 	misc = []
@@ -81,6 +77,7 @@ while downloading:
 		if f['name'] not in completed:
 			# If the file is the first one
 			if i == 0:
+				simultan = 2 # Start downloading 2 at a time
 				print "Extracting first file %s" % f['name']
 				nullw = open('/dev/null', 'w')
 
@@ -100,14 +97,15 @@ while downloading:
 				
 				print "Playing %s" % video_file
 				if sys.platform == "darwin":
-					subprocess.call(['mplayer', target_path])
-				elif "linux" in sys.platform:
 					subprocess.call(['open', target_path])
+				elif "linux" in sys.platform:
+					subprocess.call(['mplayer', target_path])
 				else:
 					exit("Unknown platform, why the face?")
 			else:
-				p.stdin.write("C\n")
+				simultan = 3 # Start downloading 3 at a time
 				print "Extracting next file %s" % f['name']
+				p.stdin.write("C\n")
 			completed.append(f['name'])
 	
 	queue = rars + misc
@@ -120,7 +118,7 @@ while downloading:
 				'selected': False,
 			}
 
-		if f['completed'] < f['size'] and downloading < 3:
+		if f['completed'] < f['size'] and downloading < simultan:
 			filedict['selected'] = True
 			if downloading == 0:
 				filedict['priority'] = 'high'
