@@ -18,6 +18,7 @@
 # - Settings
 #   - Number of simultaneous downloads
 #   - Path
+#   - Keep seeding
 # - rtorrent support
 
 from configobj import ConfigObj
@@ -68,15 +69,15 @@ while downloading:
 		# Separate rar files and other files
 		rars = []
 		misc = []
-		for fid in t.files(): # Iterate over file IDs
+		for fid in t.files():
 			f = t.files()[fid]
 			f['id'] = fid
 			patterns = [
 					r"\.rar$",			# .rar
 					r"\.[r-t]\d{2}$",	# .r02
 				]
-
-			if any([re.search(pattern, f['name']) for pattern in patterns]):
+			
+			if any([re.search(pattern, f['name']) for pattern in patterns]) and f['name'].count("/") == 1:
 				rars.append(f)
 			else:
 				misc.append(f)
@@ -97,7 +98,7 @@ while downloading:
 				break
 
 			# If new file completed
-			if f['name'] not in completed:
+			if f['name'] not in [x['name'] for x in completed]:
 				# If the file is the first one
 				if i == 0:
 					simultan = 2 # Start downloading 2 at a time
@@ -119,7 +120,7 @@ while downloading:
 					cmd = ['unrar', 'p', '-vp', '-inul', rarpath]
 					p = subprocess.Popen(cmd, stdout=target_write, stdin=subprocess.PIPE, stderr=nullw)
 					
-					print "Playing %s" % video_file
+					print "Playing %s.%s" % (t.name, extension)
 					if sys.platform == "darwin":
 						subprocess.call(['open', target_path])
 					elif "linux" in sys.platform:
@@ -128,14 +129,16 @@ while downloading:
 						exit("Unknown platform, why the face?")
 				else:
 	#				simultan = 3 # Start downloading 3 at a time
-					print "Extracting next file %s" % f['name']
+					print "Extracting next file %s" % f['name'].split("/")[-1:]
 					p.stdin.write("C\n")
-				completed.append(f['name'])
-		
+
+				completed.append({"name": f['name'], "size": os.path.getsize(tc.session.download_dir + "/" +  f['name'])})
+
 		queue = rars + misc
 		downloading = 0 # Number of ongoing downloads
 		new_files = {t.id: {}}
-
+		
+		# Send updates to client
 		for f in queue:
 			filedict = {
 					'priority': 'low',
@@ -150,6 +153,14 @@ while downloading:
 			new_files[t.id][f['id']] = filedict
 
 		tc.set_files(new_files)
+
+		# Check for files done extracting
+		if conf.as_bool('rm_files'):
+			tot = 0
+			for f in completed:
+				tot += f['size']
+				if os.path.getsize(target_path) > tot:
+					os.unlink("%s/%s" % (tc.session.download_dir, f['name']))
 	except:
 		print "Something went wrong.. trying again"
 	time.sleep(1)
