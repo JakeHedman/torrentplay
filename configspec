@@ -1,0 +1,20 @@
+# Delete .torrent
+rm_torrent = boolean(default=False)
+
+# Delete .rars, .nfo, sample etc
+rm_files = boolean(default=False)
+
+# Number of files to download simultaneously
+simultan = integer(default=2)
+
+# Keep seeding when finished
+seed = boolean(default=False)
+
+# Where to extract, leave empty to extract next to the rars
+path = string(default="")
+
+# Transmission Web Interface settings
+[transmission]
+    username = string(default="")
+    password = string(default="")
+    port = integer(1, 65535, default=9091)

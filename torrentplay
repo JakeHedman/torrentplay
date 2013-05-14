@@ -10,18 +10,16 @@
 #     - unrar
 #     - Transmission with remote access enabled
 # 
-#   If you use Linux:
+#   If you're use Linux:
 #    - mplayer
 #    - Python 2.x (Modify hashbang)
 
 # TODO:
-# - Settings
-#   - Number of simultaneous downloads
-#   - Path
-#   - Keep seeding
 # - rtorrent support
 
+
 from configobj import ConfigObj
+from validate import Validator
 import os
 import re
 import subprocess
@@ -30,36 +28,29 @@ import time
 import transmissionrpc
 
 home = os.getenv('USERPROFILE') or os.getenv('HOME')
-confpath = "%s/%s" % (home, '.torrentplay')
-conf = ConfigObj(
-		confpath,
-		create_empty = True,
+config = ConfigObj(
+		"%s/%s" % (home, '.torrentplay'),
 		indent_type = "    ",
-		write_empty_values = True,
+		configspec = "%s/configspec" % (sys.path[0]),
 	)
 
-if len(conf) < 1:
-	conf['transmission'] = {
-			'port': 9091,
-			'username': None,
-			'password': None,
-		}
-	conf['rm_torrent'] = True
-	conf['rm_files'] = True
-	conf.write()
+validator = Validator()
+if not config.validate(validator, copy=True):
+    print 'Config file validation failed!'
+    sys.exit(1)
+config.write()
 
 tc = transmissionrpc.Client(
-		port = conf['transmission']['port'],
-		user = conf['transmission']['username'],
-		password = conf['transmission']['password'],
+		port = config['transmission']['port'],
+		user = config['transmission']['username'],
+		password = config['transmission']['password'],
 	)
 tpath = os.path.abspath(sys.argv[1])
-t = tc.add_torrent(tpath)
-if conf.as_bool('rm_torrent'):
+t = tc.add_torrent(tpath) # Torrent object
+if config['rm_torrent']:
 	os.unlink(tpath)
 t.update()
 
-simultan = 1 # Start downloading 1 at a time
 completed = [] # Container for downloaded and extracted rar files
 
 downloading = True # Fake value for first iteration
@@ -101,7 +92,6 @@ while downloading:
 			if f['name'] not in [x['name'] for x in completed]:
 				# If the file is the first one
 				if i == 0:
-					simultan = 2 # Start downloading 2 at a time
 					print "Extracting first file %s" % f['name']
 					nullw = open('/dev/null', 'w')
 
@@ -115,7 +105,8 @@ while downloading:
 					extension = "".join(video_file.split(".")[-1:])
 
 					# Create and open target
-					target_path = "%s/%s.%s" % (tc.session.download_dir, t.name, extension)
+					target_dir = os.path.realpath(os.path.expanduser(config['path'])) or tc.session.download_dir
+					target_path = "%s/%s.%s" % (target_dir, t.name, extension)
 					target_write = open(target_path, 'w+')
 					cmd = ['unrar', 'p', '-vp', '-inul', rarpath]
 					p = subprocess.Popen(cmd, stdout=target_write, stdin=subprocess.PIPE, stderr=nullw)
@@ -128,15 +119,14 @@ while downloading:
 					else:
 						exit("Unknown platform, why the face?")
 				else:
-	#				simultan = 3 # Start downloading 3 at a time
-					print "Extracting next file %s" % f['name'].split("/")[-1:]
+					print "Extracting next rar: %s" % f['name'].split("/")[-1:][0]
 					p.stdin.write("C\n")
 
-				completed.append({"name": f['name'], "size": os.path.getsize(tc.session.download_dir + "/" +  f['name'])})
+				completed.append({"name": f['name'], "size": os.path.getsize(tc.session.download_dir + "/" +  f['name']), 'deleted': False})
 
 		queue = rars + misc
 		downloading = 0 # Number of ongoing downloads
-		new_files = {t.id: {}}
+		new_files = {}
 		
 		# Send updates to client
 		for f in queue:
@@ -145,28 +135,43 @@ while downloading:
 					'selected': False,
 				}
 
-			if f['completed'] < f['size'] and downloading < simultan:
+			if f['completed'] < f['size'] and downloading < config['simultan']:
 				filedict['selected'] = True
 				if downloading == 0:
 					filedict['priority'] = 'high'
+				elif downloading == 1:
+					filedict['priority'] = 'normal'
+				else:
+					filedict['priority'] = 'low'
+
 				downloading += 1
-			new_files[t.id][f['id']] = filedict
+			new_files[f['id']] = filedict
 
-		tc.set_files(new_files)
+		tc.set_files({t.id: new_files})
 
-		# Check for files done extracting
-		if conf.as_bool('rm_files'):
+		# Check for files done extracting and purge them
+		if config['rm_files']:
+			# Keep track of size to avoid deleting a .rar before unrar is done
+			# with it
 			tot = 0
 			for f in completed:
 				tot += f['size']
-				if os.path.getsize(target_path) > tot:
-					os.unlink("%s/%s" % (tc.session.download_dir, f['name']))
-	except:
+				if not f['deleted']:
+					if f['name'] in [x['name'] for x in rars]:
+						if os.path.getsize(target_path) > tot:
+							print "Deleting rar: %s" % f['name'].split("/")[-1:][0]
+							os.unlink("%s/%s" % (tc.session.download_dir, f['name']))
+							f['deleted'] = True
+	except Exception, err:
+		print Exception, err
 		print "Something went wrong.. trying again"
+		print
 	time.sleep(1)
 
 print "Done downloading"
 p.wait()
 print "Done extracting"
-if conf.as_bool('rm_files'):
+if config['rm_files']:
 	tc.remove_torrent(t.id, delete_data=True)
+elif not config['seed']:
+	tc.remove_torrent(t.id, delete_data=False)
