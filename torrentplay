@@ -36,7 +36,7 @@ config = ConfigObj(
 
 validator = Validator()
 if not config.validate(validator, copy=True):
-    print 'Config file validation failed!'
+    print 'Config file validation failed! try $ rm ~/.torrentplay'
     sys.exit(1)
 config.write()
 
